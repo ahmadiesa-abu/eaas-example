@@ -56,7 +56,8 @@ node_templates:
           inputs: &vm_deployment_inputs
             cloud_credentials: { get_input: cloud_credentials }
             resource_config:
-              vpc_deployment_id: { get_attribute: [ vpc_deployment, deployment, id ] }
+              # vpc_deployment_id: { get_attribute: [ vpc_deployment, deployment, id ] }
+              vpc_deployment_id: ~
               resource_prefix: { get_input: resource_prefix }
               aws_region_name: { get_input: [ cloud_credentials, region_name ] }
               ami_id: { get_input: [ resource_config, ami_id ] }

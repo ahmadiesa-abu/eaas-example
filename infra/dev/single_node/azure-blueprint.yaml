@@ -62,14 +62,15 @@ node_templates:
         blueprint:
           id: { concat: [ { get_input: resource_prefix }, "-vm" ] }
           #blueprint_archive: https://github.com/cloudify-community/eaas-example/releases/download/2.0rc1/vm.zip
-          blueprint_archive: https://github.com/ahmadiesa-abu/eaas-example/archive/refs/heads/master.zip
-          main_file_name: infra/dev/vm/azure-blueprint.yaml
+          blueprint_archive: https://github.com/ahmadiesa-abu/eaas-example/releases/download/vm/vm.zip
+          main_file_name: azure-blueprint.yaml
         deployment:
           id: { concat: [ { get_input: resource_prefix }, '-vm' ] }
           inputs:
             cloud_credentials: { get_input: cloud_credentials }
             resource_config:
-              rg_deployment_id: { get_attribute: [ rg_deployment, deployment, id ] }
+              # rg_deployment_id: { get_attribute: [ rg_deployment, deployment, id ] }
+              rg_deployment_id: ~
               resource_prefix: { get_input: resource_prefix }
               azure_location_name: { get_input: [ cloud_credentials, region_name ]}
               image: { get_input: [ resource_config, image ] }
