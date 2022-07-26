@@ -1,0 +1,124 @@
+tosca_definitions_version: cloudify_dsl_1_3
+
+imports:
+  - https://cloudify.co/spec/cloudify/6.2.0/types.yaml
+  - plugin:cloudify-aws-plugin?version= >=2.5.6
+  - ttyd/ttyd.yaml
+
+dsl_definitions:
+  aws_client: &aws_client
+    aws_access_key_id: { get_input: [ cloud_credentials, aws_access_key_id ] }
+    aws_secret_access_key: { get_input: [ cloud_credentials, aws_secret_access_key ] }
+    region_name: { get_input: [ resource_config, aws_region_name ] }
+
+inputs:
+  resource_config:
+    type: resource_config
+  cloud_credentials:
+    type: dict
+
+data_types:
+  resource_config:
+    properties:
+      vpc_deployment_id:
+        type: string
+      resource_prefix:
+        type: string
+      aws_region_name:
+        type: string
+      ami_id:
+        type: string
+      instance_type:
+        type: string
+
+
+node_templates:
+  # vpc_deployment:
+  #   type: cloudify.nodes.SharedResource
+  #   properties:
+  #     resource_config:
+  #       deployment:
+  #         id: { get_input: [ resource_config, vpc_deployment_id ] }
+  terraform:
+    type: cloudify.nodes.terraform
+
+  vm:
+    type: cloudify.nodes.terraform.Module
+    properties:
+      resource_config:
+        source:
+          location: https://github.com/cloudify-community/tf-source/archive/refs/heads/main.zip
+        source_path: template/modules/public_vm
+        variables:
+          env_name: { get_input: [ resource_config, resource_prefix ] }
+          access_key: { get_input: [ cloud_credentials, aws_access_key_id ] }
+          secret_key: { get_input: [ cloud_credentials, aws_secret_access_key ] }
+          aws_region: { get_input: [ resource_config, aws_region_name ] }
+          aws_zone: { concat: [ { get_input: [ resource_config, aws_region_name ] }, 'a' ] }
+          admin_user: centos
+          admin_key_public: { get_secret: agent_key_public }
+    relationships:
+      - target: terraform
+        type: cloudify.terraform.relationships.run_on_host
+  #   type: cloudify.nodes.aws.ec2.Instances
+  #   properties:
+  #     client_config: *aws_client
+  #     agent_config:
+  #       install_method: none
+  #     resource_config:
+  #       ImageId: { get_attribute: [ image, aws_resource_id ] }
+  #       InstanceType: { get_input: [ resource_config, instance_type ] }
+  #       kwargs:
+  #         KeyName: { get_input: [ cloud_credentials, aws_keypair ] }
+  #     Tags:
+  #       - Key: Name
+  #         Value: { concat: [ { get_input: [ resource_config, resource_prefix ] }, '-vm' ] }
+  #   relationships:
+  #     - type: cloudify.relationships.depends_on
+  #       target: ip
+  #     - type: cloudify.relationships.depends_on
+  #       target: nic
+  #     - type: cloudify.relationships.depends_on
+  #       target: image
+  # ip:
+  #   type: cloudify.nodes.aws.ec2.ElasticIP
+  #   properties:
+  #     client_config: *aws_client
+  #     resource_config:
+  #       Domain: vpc
+  #     Tags:
+  #       - Key: Name
+  #         Value: { concat: [ { get_input: [ resource_config, resource_prefix ] }, '-ip' ] }
+  #   relationships:
+  #     - type: cloudify.relationships.depends_on
+  #       target: nic
+  # nic:
+  #   type: cloudify.nodes.aws.ec2.Interface
+  #   properties:
+  #     client_config: *aws_client
+  #     resource_config:
+  #       kwargs:
+  #         SubnetId: { get_attribute: [ vpc_deployment, capabilities, subnet_ids, 0 ] }
+  #         Groups:
+  #           - { get_attribute: [ vpc_deployment, capabilities, agents_security_group_id ] }
+  #     Tags:
+  #       - Key: Name
+  #         Value: { concat: [ { get_input: [ resource_config, resource_prefix ] }, '-nic' ] }
+  #   relationships:
+  #     - target: vpc_deployment
+  #       type: cloudify.relationships.depends_on
+  # image:
+  #   type: cloudify.nodes.aws.ec2.Image
+  #   properties:
+  #     client_config: *aws_client
+  #     use_external_resource: true
+  #     resource_config:
+  #       kwargs:
+  #         Filters:
+  #           - Name: name
+  #             Values:
+  #             - CentOS 7.9.2009 x86_64
+
+capabilities:
+  vm_ip:
+    value: { get_attribute: [ cloud_resources, resources, eip, instances, 0, attributes, public_ip ] }

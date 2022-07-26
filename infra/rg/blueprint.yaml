@@ -1,0 +1,216 @@
+tosca_definitions_version: cloudify_dsl_1_3
+
+imports:
+  - https://cloudify.co/spec/cloudify/6.2.0/types.yaml
+  - plugin:cloudify-azure-plugin?version= >=3.0.10
+
+dsl_definitions:
+  client_config: &azure_config
+    subscription_id: { get_input: [ cloud_credentials, azure_subscription_id ] }
+    tenant_id: { get_input: [ cloud_credentials, azure_tenant_id ] }
+    client_id: { get_input: [ cloud_credentials, azure_client_id ] }
+    client_secret: { get_input: [ cloud_credentials, azure_client_secret ] }
+
+inputs:
+  cloud_credentials:
+    type: dict
+  resource_config:
+    type: resource_config
+
+data_types:
+  resource_config:
+    properties:
+      name:
+        type: string
+      azure_location_name:
+        type: string
+      cidr_block:
+        type: string
+        default: 10.0.0.0/16
+      subnet_1_cidr:
+        type: string
+        default: 10.0.0.0/23
+      subnet_2_cidr:
+        type: string
+        default: 10.0.2.0/23
+      rg_tags:
+        type: dict
+        default:
+          Name: { get_input: [ resource_config, name ] }
+      vn_tags:
+        type: dict
+        default:
+          Name: { concat: [ { get_input: [ resource_config, name ] }, '-vnet' ] }
+      subnet_1_tags:
+        type: dict
+        default:
+          Name: { concat: [ { get_input: [ resource_config, name ] }, '-subnet-1' ] }
+      subnet_2_tags:
+        type: dict
+        default:
+          Name: { concat: [ { get_input: [ resource_config, name ] }, '-subnet-2' ] }
+
+
+node_templates:
+  resource_group:
+    type: cloudify.azure.nodes.ResourceGroup
+    properties:
+      client_config: *azure_config
+      name: { get_input: [ resource_config, name ] }
+      location: { get_input: [ resource_config, azure_location_name ] }
+      tags: { get_input: [ resource_config, rg_tags ] }
+
+  network:
+    type: cloudify.azure.nodes.network.VirtualNetwork
+    properties:
+      client_config: *azure_config
+      name: { concat: [ { get_input: [ resource_config, name ] }, '-vnet' ] }
+      location: { get_input: [ resource_config, azure_location_name ] }
+      tags: { get_input: [ resource_config, vn_tags ] }
+      resource_config:
+        addressSpace:
+          addressPrefixes:
+            - { get_input: [ resource_config, cidr_block ] }
+      retry_after: 5
+    relationships:
+      - type: cloudify.azure.relationships.contained_in_resource_group
+        target: resource_group
+
+  subnet_1:
+    type: cloudify.azure.nodes.network.Subnet
+    properties:
+      client_config: *azure_config
+      name: { concat: [ { get_input: [ resource_config, name ] }, '-subnet-1' ] }
+      location: { get_input: [ resource_config, azure_location_name ] }
+      tags: { get_input: [ resource_config, subnet_1_tags ] }
+      retry_after: 5
+      resource_config:
+        addressPrefix: { get_input: [ resource_config, subnet_1_cidr ] }
+    relationships:
+    - type: cloudify.azure.relationships.contained_in_virtual_network
+      target: network
+
+  subnet_2:
+    type: cloudify.azure.nodes.network.Subnet
+    properties:
+      client_config: *azure_config
+      name: { concat: [ { get_input: [ resource_config, name ] }, '-subnet-2' ] }
+      location: { get_input: [ resource_config, azure_location_name ] }
+      tags: { get_input: [ resource_config, subnet_2_tags ] }
+      retry_after: 5
+      resource_config:
+        addressPrefix: { get_input: [ resource_config, subnet_2_cidr ] }
+    relationships:
+    - type: cloudify.azure.relationships.contained_in_virtual_network
+      target: network
+    - type: cloudify.relationships.depends_on
+      target: subnet_1
+
+  agents_security_group:
+    type: cloudify.azure.nodes.network.NetworkSecurityGroup
+    properties:
+      client_config: *azure_config
+      name: { concat: [ { get_input: [ resource_config, name ] } , '-cfy-agents' ] }
+      location: { get_input: [ resource_config, azure_location_name ] }
+      retry_after: 5
+      resource_config:
+        securityRules:
+          - name: { concat: [ { get_input: [ resource_config, name ] } , '-cfy-agents-allow-ssh' ] }
+            properties:
+              description: SSH access
+              protocol: Tcp
+              sourcePortRange: '*'
+              destinationPortRange: 22
+              sourceAddressPrefix: '*'
+              destinationAddressPrefix: '*'
+              priority: 100
+              access: Allow
+              direction: Inbound
+          - name: { concat: [ { get_input: [ resource_config, name ] } , '-cfy-agents-allow-s3' ] }
+            properties:
+              description: S3 access
+              protocol: Tcp
+              sourcePortRange: '*'
+              destinationPortRange: 9000
+              sourceAddressPrefix: '*'
+              destinationAddressPrefix: '*'
+              priority: 103
+              access: Allow
+              direction: Inbound
+          - name: { concat: [ { get_input: [ resource_config, name ] } , '-cfy-agents-allow-ttyd' ] }
+            properties:
+              description: ttyd access
+              protocol: Tcp
+              sourcePortRange: '*'
+              destinationPortRange: 7681
+              sourceAddressPrefix: '*'
+              destinationAddressPrefix: '*'
+              priority: 104
+              access: Allow
+              direction: Inbound
+          - name: { concat: [ { get_input: [ resource_config, name ] } , '-cfy-agents-allow-minikube' ] }
+            properties:
+              description: minikube access
+              protocol: Tcp
+              sourcePortRange: '*'
+              destinationPortRange: 8443
+              sourceAddressPrefix: '*'
+              destinationAddressPrefix: '*'
+              priority: 105
+              access: Allow
+              direction: Inbound
+          - name: { concat: [ { get_input: [ resource_config, name ] } , '-cfy-agents-allow-service' ] }
+            properties:
+              description: nginx access
+              protocol: Tcp
+              sourcePortRange: '*'
+              destinationPortRange: 30080
+              sourceAddressPrefix: '*'
+              destinationAddressPrefix: '*'
+              priority: 106
+              access: Allow
+              direction: Inbound
+    relationships:
+    - type: cloudify.azure.relationships.contained_in_virtual_network
+      target: network
+    - type: cloudify.relationships.depends_on
+      target: subnet_2
+
+  storage_account:
+    type: cloudify.azure.nodes.storage.StorageAccount
+    properties:
+      client_config: *azure_config
+      name: { concat: [ { get_input: [ resource_config, name ] }, 'sa' ] }
+      location: { get_input: [ resource_config, azure_location_name ] }
+      resource_config:
+        accountType: Standard_LRS
+    relationships:
+      - type: cloudify.azure.relationships.contained_in_resource_group
+        target: resource_group
+      - type: cloudify.relationships.depends_on
+        target: network
+
+capabilities:
+  rg_id:
+    description: |
+      Azure ID of the Resource Group
+    value: { get_attribute: [ resource_group, name ] }
+  vn_id:
+    description: |
+      Azure ID of the Virtual Network
+    value: { get_attribute: [ network, name ] }
+  subnet_ids:
+    description: |
+      Azure ID's of subnets
+    value: 
+      - { get_attribute: [ subnet_1, name ] }
+      - { get_attribute: [ subnet_2, name ] }
+  agents_security_group_id:
+    description: |
+      Azure ID of a security group that allows Cloudify Manager to access
+      VM's via SSH
+    value: { get_attribute: [ agents_security_group, name ] }
+  sa_id:
+    description: |
+      Azure ID of the Storage Account
+    value: { get_attribute: [ storage_account, name ] }

@@ -1,0 +1,79 @@
+tosca_definitions_version: cloudify_dsl_1_3
+
+imports:
+  - https://cloudify.co/spec/cloudify/6.2.0/types.yaml
+  - plugin:cloudify-aws-plugin?version= >=2.5.6
+
+dsl_definitions:
+  aws_client: &aws_client
+    aws_access_key_id: { get_input: [ cloud_credentials, aws_access_key_id ] }
+    aws_secret_access_key: { get_input: [ cloud_credentials, aws_secret_access_key ] }
+    region_name: { get_input: [ cloud_credentials, region_name ] }
+
+inputs:
+  resource_prefix:
+    type: string
+  resource_config:
+    type: resource_config
+  cloud_credentials:
+    type: dict
+
+data_types:
+  resource_config:
+    properties:
+      ami_id:
+        type: string
+      instance_type:
+        type: string
+
+node_templates:
+  # vpc_deployment:
+  #   type: cloudify.nodes.Component
+  #   properties:
+  #     resource_config:
+  #       blueprint:
+  #         id: { concat: [ { get_input: resource_prefix }, "-vpc" ] }
+  #         blueprint_archive: https://github.com/cloudify-community/eaas-example/releases/download/2.0rc1/vpc.zip
+  #         main_file_name: blueprint.yaml
+  #       deployment:
+  #         id: { concat: [ { get_input: resource_prefix }, '-vpc' ] }
+  #         inputs:
+  #           cloud_credentials: { get_input: cloud_credentials }
+  #           resource_config:
+  #             name: { concat: [ { get_input: resource_prefix }, '-vpc' ] }
+  #             aws_region_name: { get_input: [ cloud_credentials, region_name ] }
+  #             availability_zone_1: { concat: [{ get_input: [ cloud_credentials, region_name ] }, 'a' ] }
+  #             availability_zone_2: { concat: [{ get_input: [ cloud_credentials, region_name ] }, 'c' ] }
+
+  vm_deployment:
+    type: cloudify.nodes.Component
+    properties:
+      resource_config:
+        blueprint:
+          id: { concat: [ { get_input: resource_prefix }, "-vm" ] }
+          #blueprint_archive: https://github.com/cloudify-community/eaas-example/releases/download/2.0rc1/vm.zip
+          blueprint_archive: https://github.com/ahmadiesa-abu/eaas-example/archive/refs/heads/master.zip
+          main_file_name: infra/dev/vm/aws-blueprint.yaml
+        deployment:
+          id: { concat: [ { get_input: resource_prefix }, '-vm' ] }
+          inputs:
+            cloud_credentials: { get_input: cloud_credentials }
+            resource_config:
+              vpc_deployment_id: { get_attribute: [ vpc_deployment, deployment, id ] }
+              resource_prefix: { get_input: resource_prefix }
+              aws_region_name: { get_input: [ cloud_credentials, region_name ] }
+              ami_id: { get_input: [ resource_config, ami_id ] }
+              instance_type: { get_input: [ resource_config, instance_type ] }
+    # relationships:
+    #   - target: vpc_deployment
+    #     type: cloudify.relationships.depends_on
+
+capabilities:
+  k8s_vm_ip:
+    value: { get_attribute: [ vm_deployment, capabilities, vm_ip ] }
+  db_vm_ip:
+    value: { get_attribute: [ vm_deployment, capabilities, vm_ip ] }
+  s3_vm_ip:
+    value: { get_attribute: [ vm_deployment, capabilities, vm_ip ] }
+  resource_prefix:
+    value: { get_input: resource_prefix }
