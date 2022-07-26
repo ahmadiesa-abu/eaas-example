@@ -3,6 +3,7 @@ tosca_definitions_version: cloudify_dsl_1_3
 imports:
   - https://cloudify.co/spec/cloudify/6.2.0/types.yaml
   - plugin:cloudify-azure-plugin?version= >=3.0.10
+  - plugin:cloudify-terraform-plugin
   - ttyd/ttyd.yaml
 
 dsl_definitions:
@@ -113,6 +114,11 @@ node_templates:
           admin_user: centos
           admin_key_public: { get_secret: agent_key_public }
           prefix: { get_input: [ resource_config, resource_prefix ] }
+    interfaces:
+      cloudify.interfaces.lifecycle:
+        poststart:
+          implementation: scripts/set_public_ip.py
+          executor: central_deployment_agent
     relationships:
       - target: terraform
         type: cloudify.terraform.relationships.run_on_host
@@ -198,4 +204,4 @@ node_templates:
 
 capabilities:
   vm_ip:
-    value: { get_attribute: [ cloud_resources, resources, fip, instances, 0, attributes, ip_address ] }
+    value: { get_attribute: [ vm, resources, fip, instances, 0, attributes, ip_address ] }

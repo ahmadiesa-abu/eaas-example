@@ -69,7 +69,8 @@ node_templates:
           inputs:
             cloud_credentials: { get_input: cloud_credentials }
             resource_config:
-              rg_deployment_id: { get_attribute: [ rg_deployment, deployment, id ] }
+              # rg_deployment_id: { get_attribute: [ rg_deployment, deployment, id ] }
+              rg_deployment_id: ~
               resource_prefix: { get_input: resource_prefix }
               azure_location_name: { get_input: [ cloud_credentials, region_name ]}
               image: { get_input: [ resource_config, image ] }

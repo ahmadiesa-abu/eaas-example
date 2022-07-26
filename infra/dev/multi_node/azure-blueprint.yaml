@@ -67,7 +67,8 @@ node_templates:
           inputs:
             cloud_credentials: { get_input: cloud_credentials }
             resource_config: &vm_deployment_inputs_resource_config
-              rg_deployment_id: { get_attribute: [ rg_deployment, deployment, id ] }
+              # rg_deployment_id: { get_attribute: [ rg_deployment, deployment, id ] }
+              rg_deployment_id: ~
               resource_prefix: { concat: [ { get_input: resource_prefix }, '-k8s' ] }
               azure_location_name: { get_input: [ cloud_credentials, region_name ] }
               image: { get_input: [ resource_config, image ] }
